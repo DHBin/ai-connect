@@ -1,0 +1,12 @@
+services:
+  ai-connect:
+    build: .
+    container_name: ai-connect          
+    entrypoint: ["./ai-connect", "chatgpt", "--mirror"]        
+    environment:
+      - PROXY_SERVER=http://<yourproxy>:<port>
+    ports:
+      - "9090:9090"                     
+    volumes:
+      - ./config.json:/root/.ai-connect/config.json  
+    restart: unless-stopped             

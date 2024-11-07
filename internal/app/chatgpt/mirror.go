@@ -1,6 +1,7 @@
 package chatgpt
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/dhbin/ai-connect/internal/common"
 	"github.com/dhbin/ai-connect/internal/common/code"
@@ -10,9 +11,13 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/spf13/cobra"
+	"golang.org/x/net/proxy"
 	"html/template"
 	"io"
+	"net"
 	"net/http"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -22,6 +27,44 @@ var proxyClient = http.Client{}
 func RunMirror() {
 	mirrorConfig := config.ChatGptMirror()
 	tls := mirrorConfig.Tls
+
+	// 从环境变量获取代理地址
+	proxyEnv := os.Getenv("PROXY_SERVER")
+	if proxyEnv != "" {
+		proxyURL, err := url.Parse(proxyEnv)
+		if err != nil {
+			cobra.CheckErr(err)
+		}
+		if proxyURL.Scheme == "socks5" || proxyURL.Scheme == "socks5h" {
+			var auth *proxy.Auth
+			if proxyURL.User != nil {
+				username := proxyURL.User.Username()
+				password, _ := proxyURL.User.Password()
+				auth = &proxy.Auth{
+					User:     username,
+					Password: password,
+				}
+			}
+			dialer, err := proxy.SOCKS5("tcp", proxyURL.Host, auth, proxy.Direct)
+			if err != nil {
+				cobra.CheckErr(err)
+			}
+			transport := &http.Transport{
+				DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+					return dialer.Dial(network, addr)
+				},
+			}
+			proxyClient.Transport = transport
+		} else {
+			// 处理 HTTP(s) 代理
+			proxyClient.Transport = &http.Transport{
+				Proxy: http.ProxyURL(proxyURL),
+			}
+		}
+	} else {
+		// 如果没有设置代理，使用默认传输
+		proxyClient.Transport = http.DefaultTransport
+	}
 
 	e := echo.New()
 
